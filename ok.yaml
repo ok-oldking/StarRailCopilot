@@ -1,0 +1,12 @@
+requires_python:
+  "3.10"
+profiles:
+  default:
+    main_script:
+      "gui.py"
+    admin:
+      false
+    requirements:
+      "requirements.txt"
+
+
