@@ -1,0 +1,86 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    # Runs daily at 00:00 UTC. Adjust as needed.
+    # See https://crontab.guru/ for cron syntax
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows manual triggering from the Actions tab
+
+# Job-level permissions.
+# Allows the GITHUB_TOKEN to push to the repository.
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Environment variables for this job
+    # Configure these for your repository
+    env:
+      # REQUIRED: Replace with the HTTPS URL of the PARENT (upstream) repository
+      UPSTREAM_REPO_URL: "https://github.com/LmeSzinc/StarRailCopilot"
+      # Optional: Branch in YOUR FORK to update (default: main)
+      FORK_BRANCH: "master"
+      # Optional: Branch in UPSTREAM to sync from (default: main)
+      UPSTREAM_BRANCH: "master"
+
+    steps:
+      - name: Checkout Fork
+        uses: actions/checkout@v4
+        with:
+          # We need to fetch all history for all branches and tags
+          # to ensure the merge process works correctly.
+          fetch-depth: 0
+          # Fetch all tags as well when checking out the fork
+          fetch-tags: true
+          # If you are using a PAT instead of GITHUB_TOKEN (e.g., for private upstreams
+          # or to bypass branch protection rules not allowing GITHUB_TOKEN)
+          # token: ${{ secrets.YOUR_PAT_SECRET_NAME }}
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "actions-bot@github.com"
+
+      - name: Add Upstream Remote
+        run: |
+          git remote add upstream ${{ env.UPSTREAM_REPO_URL }}
+          echo "Upstream remote added: ${{ env.UPSTREAM_REPO_URL }}"
+
+      - name: Fetch Upstream (Branches and Tags)
+        run: |
+          git fetch upstream --force --tags
+          # '--force' is used with '--tags' to overwrite local tags if they differ,
+          # ensuring your fork's tags match upstream.
+          # If you prefer not to overwrite, you can remove --force, but new tags
+          # from upstream might not be pulled if a tag with the same name exists locally
+          # but points to a different commit.
+          echo "Fetched from upstream, including all tags."
+
+      - name: Merge Upstream Changes
+        run: |
+          git checkout ${{ env.FORK_BRANCH }}
+          echo "Checked out local branch: ${{ env.FORK_BRANCH }}"
+          
+          # Try to merge. If there are conflicts, this will fail the workflow.
+          # You can choose 'rebase' instead of 'merge' if you prefer a linear history.
+          # Be cautious with rebase if you have collaborators on your fork's branch.
+          git merge upstream/${{ env.UPSTREAM_BRANCH }} --no-edit
+          echo "Merged upstream/${{ env.UPSTREAM_BRANCH }} into ${{ env.FORK_BRANCH }}"
+
+      - name: Push Branch Changes to Fork
+        run: |
+          # The GITHUB_TOKEN (default) might not have permission to push if branch protection rules
+          # are in place that prevent it. In such cases, use a PAT.
+          git push origin ${{ env.FORK_BRANCH }}
+          echo "Pushed branch changes to origin/${{ env.FORK_BRANCH }}"
+
+      - name: Push Tags to Fork
+        run: |
+          # Push all local tags (which now include upstream's tags) to the fork.
+          # Use --force if you want to overwrite tags on your fork that might
+          # have the same name but point to different commits than upstream.
+          # Be cautious with --force on tags.
+          git push origin --tags # Add --force here if needed: git push origin --tags --force
+          echo "Pushed all tags to origin."
